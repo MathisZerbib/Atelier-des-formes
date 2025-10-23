@@ -403,14 +403,13 @@ const App: React.FC = () => {
               )}
             </div>
           </div>
-          <div className="flex items-center gap-3">
+         
+          <div className="flex gap-4 items-center">
             <button
               onClick={() => setPanelOpen(true)}
               className="px-3 py-2 bg-sky-600 text-white rounded-md"
               aria-label="Ouvrir la classe"
-            >Classe</button>
-          </div>
-          <div className="flex gap-4 items-center">
+            >Ma classe</button>
             <button
               onClick={resetCurrentHouse}
               aria-label="Réinitialiser la maison"
