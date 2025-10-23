@@ -7,6 +7,7 @@ import { Playground } from './components/Playground';
 import { Shape } from './components/Shape';
 import { History } from './components/History';
 import Confetti from './components/Confetti';
+import ConfirmationModal from './components/ConfirmationModal';
 import * as storage from './storage';
 
 type House = { body: PlacedShape; roof: PlacedShape };
@@ -41,6 +42,14 @@ const App: React.FC = () => {
     target: 'house-body' | 'house-roof';
     part: PlacedShape;
   } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    action: 'clear-history' | 'delete-child' | null;
+    classroomId?: string;
+    childId?: string;
+    childName?: string;
+    count?: number;
+  }>({ open: false, action: null });
   
   const playgroundRef = useRef<HTMLDivElement>(null);
   const successTimeoutRef = useRef<number | null>(null);
@@ -156,8 +165,21 @@ const App: React.FC = () => {
   };
 
   const handleClearChildHistory = (classroomId: string, childId: string) => {
-    const ok = window.confirm("Effacer l'historique de cet enfant ? Cette action est irréversible.");
-    if (!ok) return;
+    // open confirmation modal instead of immediate confirm
+    const classes = storage.loadClassrooms();
+    const cls = classes.find(c => c.id === classroomId);
+    if (!cls) return;
+    const ch = cls.children.find(ch => ch.id === childId);
+    if (!ch) return;
+    const count = (ch.history || []).length;
+    if (count === 0) {
+      alert("L'historique de cet enfant est déjà vide.");
+      return;
+    }
+    setConfirmModal({ open: true, action: 'clear-history', classroomId, childId, childName: ch.name, count });
+  };
+
+  const performClearChildHistory = (classroomId: string, childId: string) => {
     const classes = storage.loadClassrooms();
     const cls = classes.find(c => c.id === classroomId);
     if (!cls) return;
@@ -170,6 +192,47 @@ const App: React.FC = () => {
       setHouseHistory([]);
       setBuiltCombos({});
     }
+    setConfirmModal({ open: false, action: null });
+  };
+
+  const openConfirmDeleteChild = (classroomId: string, childId: string) => {
+    const classes = storage.loadClassrooms();
+    const cls = classes.find(c => c.id === classroomId);
+    if (!cls) return;
+    const ch = cls.children.find(ch => ch.id === childId);
+    if (!ch) return;
+    setConfirmModal({ open: true, action: 'delete-child', classroomId, childId, childName: ch.name });
+  };
+
+  const performDeleteChild = (classroomId: string, childId: string) => {
+    const classes = storage.loadClassrooms();
+    const cls = classes.find(c => c.id === classroomId);
+    if (!cls) return;
+    const idx = cls.children.findIndex(ch => ch.id === childId);
+    if (idx === -1) return;
+    cls.children.splice(idx, 1);
+    storage.saveClassrooms(classes);
+    setClassrooms(prev => prev.map(c => c.id === classroomId ? { ...c, children: c.children.filter(child => child.id !== childId) } : c));
+
+    // if deleted child was selected, switch to another child or clear state
+    if (selectedChildId === childId) {
+      const nextChild = cls.children[0] || null;
+      if (nextChild) {
+        setSelectedChildId(nextChild.id);
+        setChildName(nextChild.name);
+        setHouseHistory(nextChild.history || []);
+        const combos: Record<string, boolean> = {};
+        (nextChild.history || []).forEach(h => { combos[`${h.body.color}|${h.roof.color}`] = true; });
+        setBuiltCombos(combos);
+      } else {
+        setSelectedChildId(null);
+        setChildName('');
+        setHouseHistory([]);
+        setBuiltCombos({});
+      }
+    }
+
+    setConfirmModal({ open: false, action: null });
   };
 
   const handleSelectChild = (classroomId: string, childId: string) => {
@@ -358,6 +421,7 @@ const App: React.FC = () => {
   }, [houseState.body, houseState.roof]);
 
   return (
+    <>
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       {showConfetti && <Confetti />}
       <div className="flex flex-col h-screen p-4 md:p-8 font-sans bg-sky-50">
@@ -403,13 +467,47 @@ const App: React.FC = () => {
               )}
             </div>
           </div>
-         
+
           <div className="flex gap-4 items-center">
             <button
               onClick={() => setPanelOpen(true)}
               className="px-3 py-2 bg-sky-600 text-white rounded-md"
               aria-label="Ouvrir la classe"
             >Ma classe</button>
+
+            <button
+              onClick={async () => {
+                const el = document.getElementById('history-panel');
+                if (!el) { alert("Aucun historique à capturer"); return; }
+                try {
+                  const html2canvas = (await import('html2canvas')).default;
+                  const canvas = await html2canvas(el as HTMLElement, { backgroundColor: null });
+                  canvas.toBlob((blob) => {
+                    if (!blob) { alert('Erreur: impossible de générer l\'image'); return; }
+                    const date = new Date();
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const year = String(date.getFullYear());
+                    const safeName = (childName || 'enfant').replace(/[^a-z0-9-_]/gi, '_');
+                    const filename = `${safeName}_${day}-${month}-${year}.png`;
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    URL.revokeObjectURL(url);
+                  }, 'image/png');
+                } catch (err) {
+                  console.error(err);
+                  alert("Erreur lors de la capture. Installez 'html2canvas' ou vérifiez la console.");
+                }
+              }}
+              className="px-3 py-2 bg-emerald-600 text-white rounded-md"
+              aria-label="Capturer l'historique"
+            >📸</button>
+
             <button
               onClick={resetCurrentHouse}
               aria-label="Réinitialiser la maison"
@@ -421,7 +519,7 @@ const App: React.FC = () => {
               </svg>
               <span className="sr-only">Réinitialiser la maison</span>
             </button>
-            <button
+            {/* <button
               onClick={resetAll}
               aria-label="Tout réinitialiser"
               className="px-4 py-3 bg-red-500 text-white rounded-lg shadow-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-75 transition-transform transform hover:scale-105"
@@ -433,7 +531,7 @@ const App: React.FC = () => {
                 <path d="M14 11v6" />
               </svg>
               <span className="sr-only">Tout réinitialiser</span>
-            </button>
+            </button> */}
           </div>
         </header>
         <main className="flex-1 flex flex-col gap-4 overflow-hidden">
@@ -495,8 +593,41 @@ const App: React.FC = () => {
                           </>
                         ) : (
                           <>
-                            <button onClick={() => startEditChild(ch.id, ch.name)} className="px-2 py-1 bg-yellow-300 rounded">✎</button>
-                            <button onClick={() => handleClearChildHistory(classrooms[0].id, ch.id)} className="px-2 py-1 bg-red-400 text-white rounded">🗑</button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => startEditChild(ch.id, ch.name)}
+                                aria-label={`Renommer ${ch.name}`}
+                                title="Renommer"
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-400"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                  <path d="M4 13.5V16h2.5L15.81 6.69a1 1 0 0 0 0-1.41L14.12 3.6a1 1 0 0 0-1.41 0L4 12.31z" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </button>
+
+                              <button
+                                onClick={() => handleClearChildHistory(classrooms[0].id, ch.id)}
+                                aria-label={`Effacer historique ${ch.name}`}
+                                title="Effacer historique"
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-amber-200 bg-white text-amber-600 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-colors"
+                              >
+                                {/* /// cercle with eraser icon */}
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                  <path d="M6 6h8M6 10h8M6 14h8" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </button>
+
+                              <button
+                                onClick={() => openConfirmDeleteChild(classrooms[0].id, ch.id)}
+                                aria-label={`Supprimer ${ch.name}`}
+                                title="Supprimer"
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-transparent bg-red-50 text-red-600 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                  <path d="M6 6l8 8M14 6L6 14" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </button>
+                            </div>
                           </>
                         )}
                       </div>
@@ -548,6 +679,28 @@ const App: React.FC = () => {
         ) : null}
       </DragOverlay>
     </DndContext>
+    <ConfirmationModal
+        open={confirmModal.open}
+        title={confirmModal.action === 'delete-child' ? `Supprimer "${confirmModal.childName || ''}" ?` : `Effacer l'historique de "${confirmModal.childName || ''}" ?`}
+        message={
+          confirmModal.action === 'clear-history'
+            ? `Effacer l'historique de "${confirmModal.childName || ''}" (${confirmModal.count || 0} maison(s)) ?\nCette action est irréversible.`
+            : `Supprimer définitivement l'enfant "${confirmModal.childName || ''}" ?\nCette action supprimera aussi son historique.`
+        }
+        confirmLabel={confirmModal.action === 'delete-child' ? 'Supprimer' : 'Effacer'}
+        cancelLabel="Annuler"
+        onConfirm={() => {
+          if (confirmModal.action === 'clear-history' && confirmModal.classroomId && confirmModal.childId) {
+            performClearChildHistory(confirmModal.classroomId, confirmModal.childId);
+          } else if (confirmModal.action === 'delete-child' && confirmModal.classroomId && confirmModal.childId) {
+            performDeleteChild(confirmModal.classroomId, confirmModal.childId);
+          } else {
+            setConfirmModal({ open: false, action: null });
+          }
+        }}
+        onCancel={() => setConfirmModal({ open: false, action: null })}
+      />
+    </>
   );
 };
 
