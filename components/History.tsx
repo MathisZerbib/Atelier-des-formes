@@ -18,7 +18,7 @@ export const History: React.FC<HistoryProps> = ({ history, childName }) => {
     : "Maisons Construites";
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-4">
+    <div id="history-panel" className="bg-white rounded-xl shadow-lg p-4">
       <h2 className="text-xl font-bold text-gray-700 mb-3 text-center">{title}</h2>
       <div className="flex overflow-x-auto gap-6 p-4 scrollbar-thin scrollbar-thumb-blue-300 scrollbar-track-blue-100">
         {history.map((house, index) => (
