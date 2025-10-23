@@ -116,12 +116,6 @@ const App: React.FC = () => {
     });
   }, [houseHistory, selectedClassroomId, selectedChildId]);
 
-  const handleAddClassroom = (name: string) => {
-    const c = storage.addClassroom(name);
-    setClassrooms(prev => [...prev, c]);
-    setSelectedClassroomId(c.id);
-  };
-
   const handleAddChild = (name: string) => {
     const classroomId = selectedClassroomId ?? classrooms[0]?.id;
     if (!classroomId) return;
