@@ -302,7 +302,7 @@ const App: React.FC = () => {
         setHouseState({ body: null, roof: null });
         setMessage(null);
         setMessageType(null);
-      }, 1200);
+      }, 3000);
       return;
     }
 
