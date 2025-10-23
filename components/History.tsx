@@ -28,11 +28,11 @@ export const History: React.FC<HistoryProps> = ({ history, childName }) => {
             aria-label={`Maison ${index + 1} avec un corps ${house.body.color} et un toit ${house.roof.color}`}
           >
             <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
-              <Shape type={house.body.type} color={house.body.color} className="w-24 h-24" />
+              <Shape type={house.body.type} color={house.body.color} className="w-24 h-24" showDoor={true} showChimney={false} />
             </div>            
             <div className="absolute left-1/2 -translate-x-1/2 bottom-24">
               {/* Position roof bottom at the body's top so the triangle base snaps flush (no overlay) */}
-              <Shape type={house.roof.type} color={house.roof.color} className="w-24 h-auto" />
+              <Shape type={house.roof.type} color={house.roof.color} className="w-24 h-auto" showChimney={true} showDoor={false} />
             </div>
           </div>
         ))}
