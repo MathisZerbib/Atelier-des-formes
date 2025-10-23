@@ -7,6 +7,7 @@ import { Playground } from './components/Playground';
 import { Shape } from './components/Shape';
 import { History } from './components/History';
 import Confetti from './components/Confetti';
+import * as storage from './storage';
 
 type House = { body: PlacedShape; roof: PlacedShape };
 
@@ -27,6 +28,15 @@ const App: React.FC = () => {
   const [allDone, setAllDone] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [childName, setChildName] = useState('');
+  const [classrooms, setClassrooms] = useState<storage.Classroom[]>([]);
+  const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(null);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [editingChildId, setEditingChildId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [dropdownQuery, setDropdownQuery] = useState('');
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
   const [pendingPlacement, setPendingPlacement] = useState<{
     target: 'house-body' | 'house-roof';
     part: PlacedShape;
@@ -56,6 +66,133 @@ const App: React.FC = () => {
     setHouseState({ body: null, roof: null });
     setShowConfetti(false);
     setMessage(null);
+  };
+
+  // Load classrooms from storage on mount
+  useEffect(() => {
+    let classes = storage.loadClassrooms();
+    // ensure there's at least one classroom (single-classroom app)
+    if (classes.length === 0) {
+      const created = storage.addClassroom('Classe 1');
+      classes = [created];
+    }
+    setClassrooms(classes);
+    // always use first classroom
+    setSelectedClassroomId(classes[0].id);
+    if (classes[0].children.length > 0) {
+      setSelectedChildId(classes[0].children[0].id);
+      setChildName(classes[0].children[0].name);
+      setHouseHistory(classes[0].children[0].history || []);
+      const combos: Record<string, boolean> = {};
+      (classes[0].children[0].history || []).forEach(h => { combos[`${h.body.color}|${h.roof.color}`] = true; });
+      setBuiltCombos(combos);
+    }
+  }, []);
+
+  // close dropdown on outside click
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!dropdownRef.current) return;
+      if (!(e.target instanceof Node)) return;
+      if (!dropdownRef.current.contains(e.target)) setDropdownOpen(false);
+    }
+    document.addEventListener('click', onDoc);
+    return () => document.removeEventListener('click', onDoc);
+  }, []);
+
+  // Persist houseHistory to the selected child whenever it changes
+  useEffect(() => {
+    if (!selectedClassroomId || !selectedChildId) return;
+    storage.updateChildHistory(selectedClassroomId, selectedChildId, houseHistory);
+    // update local classrooms state copy as well
+    setClassrooms(prev => {
+      const copy = prev.map(c => ({ ...c, children: c.children.map(ch => ({ ...ch })) }));
+      const cls = copy.find(c => c.id === selectedClassroomId);
+      if (cls) {
+        const ch = cls.children.find(ch => ch.id === selectedChildId);
+        if (ch) ch.history = houseHistory;
+      }
+      return copy;
+    });
+  }, [houseHistory, selectedClassroomId, selectedChildId]);
+
+  const handleAddClassroom = (name: string) => {
+    const c = storage.addClassroom(name);
+    setClassrooms(prev => [...prev, c]);
+    setSelectedClassroomId(c.id);
+  };
+
+  const handleAddChild = (name: string) => {
+    const classroomId = selectedClassroomId ?? classrooms[0]?.id;
+    if (!classroomId) return;
+    const ch = storage.addChildToClassroom(classroomId, name);
+    if (!ch) return;
+    setClassrooms(prev => prev.map(c => c.id === classroomId ? { ...c, children: [...c.children, ch] } : c));
+    setSelectedChildId(ch.id);
+    setChildName(ch.name);
+    setHouseHistory([]);
+    setBuiltCombos({});
+  };
+
+  const startEditChild = (chId: string, currentName: string) => {
+    setEditingChildId(chId);
+    setEditingText(currentName);
+  };
+
+  const saveChildRename = (classroomId: string, childId: string) => {
+    const newName = editingText.trim();
+    if (!newName) return;
+    const classes = storage.loadClassrooms();
+    const cls = classes.find(c => c.id === classroomId);
+    if (!cls) return;
+    const ch = cls.children.find(ch => ch.id === childId);
+    if (!ch) return;
+    ch.name = newName;
+    storage.saveClassrooms(classes);
+    // update local copy
+    setClassrooms(prev => prev.map(c => c.id === classroomId ? { ...c, children: c.children.map(child => child.id === childId ? { ...child, name: newName } : child) } : c));
+    if (selectedChildId === childId) setChildName(newName);
+    setEditingChildId(null);
+    setEditingText('');
+  };
+
+  const cancelEditChild = () => {
+    setEditingChildId(null);
+    setEditingText('');
+  };
+
+  const handleClearChildHistory = (classroomId: string, childId: string) => {
+    const ok = window.confirm("Effacer l'historique de cet enfant ? Cette action est irréversible.");
+    if (!ok) return;
+    const classes = storage.loadClassrooms();
+    const cls = classes.find(c => c.id === classroomId);
+    if (!cls) return;
+    const ch = cls.children.find(ch => ch.id === childId);
+    if (!ch) return;
+    ch.history = [];
+    storage.saveClassrooms(classes);
+    setClassrooms(prev => prev.map(c => c.id === classroomId ? { ...c, children: c.children.map(child => child.id === childId ? { ...child, history: [] } : child) } : c));
+    if (selectedChildId === childId) {
+      setHouseHistory([]);
+      setBuiltCombos({});
+    }
+  };
+
+  const handleSelectChild = (classroomId: string, childId: string) => {
+    const child = storage.getChild(classroomId, childId);
+    setSelectedClassroomId(classroomId);
+    setSelectedChildId(childId);
+    if (child) {
+      setChildName(child.name);
+      setHouseHistory(child.history || []);
+      const combos: Record<string, boolean> = {};
+      (child.history || []).forEach(h => { combos[`${h.body.color}|${h.roof.color}`] = true; });
+      setBuiltCombos(combos);
+    } else {
+      setChildName('');
+      setHouseHistory([]);
+      setBuiltCombos({});
+    }
   };
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
@@ -233,14 +370,51 @@ const App: React.FC = () => {
         <header className="flex flex-wrap justify-between items-center gap-4 mb-6">
           <div className="flex items-baseline gap-4">
             <h1 className="text-3xl md:text-4xl font-bold text-gray-800">Atelier des Formes</h1>
-            <input
-              type="text"
-              value={childName}
-              onChange={(e) => setChildName(e.target.value)}
-              placeholder="Écris ton nom ici..."
-              className="text-xl md:text-2xl font-semibold text-gray-700 bg-sky-100 p-2 rounded-lg border-2 border-transparent focus:border-blue-400 focus:outline-none focus:ring-0 transition"
-              aria-label="Nom de l'enfant"
-            />
+            <div ref={dropdownRef} className="relative ml-4">
+              <button
+                onClick={() => setDropdownOpen(o => !o)}
+                className="flex items-center gap-2 p-2 bg-white border rounded-md shadow-sm"
+                aria-haspopup="listbox"
+                aria-expanded={dropdownOpen}
+              >
+                <span className="text-sm text-gray-700">{childName || "Choisir enfant"}</span>
+                <svg className="w-4 h-4 text-gray-500" viewBox="0 0 20 20" fill="none" stroke="currentColor"><path d="M6 8l4 4 4-4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </button>
+
+              {dropdownOpen && (
+                <div className="absolute right-0 mt-2 w-64 bg-white border rounded-md shadow-lg z-50">
+                  <div className="p-2">
+                    <input
+                      value={dropdownQuery}
+                      onChange={e => setDropdownQuery(e.target.value)}
+                      className="w-full p-2 border rounded"
+                      placeholder="Rechercher..."
+                    />
+                  </div>
+                  <ul role="listbox" className="max-h-48 overflow-auto p-2 space-y-1">
+                    {(classrooms[0]?.children || []).filter(ch => ch.name.toLowerCase().includes(dropdownQuery.toLowerCase())).map(ch => (
+                      <li key={ch.id}>
+                        <button
+                          onClick={() => { setDropdownOpen(false); setDropdownQuery(''); handleSelectChild(classrooms[0].id, ch.id); }}
+                          className={`w-full text-left px-3 py-2 rounded ${selectedChildId === ch.id ? 'bg-sky-100' : 'hover:bg-gray-50'}`}>
+                          {ch.name}
+                        </button>
+                      </li>
+                    ))}
+                    {((classrooms[0]?.children || []).filter(ch => ch.name.toLowerCase().includes(dropdownQuery.toLowerCase())).length === 0) && (
+                      <li className="px-3 py-2 text-sm text-gray-500">Aucun enfant trouvé</li>
+                    )}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setPanelOpen(true)}
+              className="px-3 py-2 bg-sky-600 text-white rounded-md"
+              aria-label="Ouvrir la classe"
+            >Classe</button>
           </div>
           <div className="flex gap-4 items-center">
             <button
@@ -295,6 +469,69 @@ const App: React.FC = () => {
           </div>
            <History history={houseHistory} childName={childName} />
         </main>
+        {/* Right-side classroom panel drawer */}
+        <div aria-hidden={!panelOpen} className={`fixed right-0 top-0 h-full w-80 bg-white shadow-lg transform transition-transform ${panelOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+          <div className="p-4 flex items-center justify-between border-b">
+            <h3 className="text-lg font-bold">Classe</h3>
+            <button onClick={() => setPanelOpen(false)} className="px-2 py-1 text-sm text-gray-600">Fermer</button>
+          </div>
+          <div className="p-4 overflow-auto">
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold mb-2">Enfants</h4>
+              <ul className="space-y-2">
+                {classrooms[0]?.children?.length ? (
+                  classrooms[0].children.map(ch => (
+                    <li key={ch.id} className="flex items-center gap-2">
+                      {editingChildId === ch.id ? (
+                        <div className="flex-1">
+                          <input value={editingText} onChange={e => setEditingText(e.target.value)} className="w-full p-2 border rounded" />
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setPanelOpen(false); handleSelectChild(classrooms[0].id, ch.id); }}
+                          className={`flex-1 text-left p-2 rounded ${selectedChildId === ch.id ? 'bg-sky-100' : 'hover:bg-gray-50'}`}>
+                          {ch.name}
+                        </button>
+                      )}
+
+                      <div className="flex items-center gap-1">
+                        {editingChildId === ch.id ? (
+                          <>
+                            <button onClick={() => saveChildRename(classrooms[0].id, ch.id)} className="px-2 py-1 bg-green-500 text-white rounded">OK</button>
+                            <button onClick={cancelEditChild} className="px-2 py-1 bg-gray-200 rounded">Annuler</button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => startEditChild(ch.id, ch.name)} className="px-2 py-1 bg-yellow-300 rounded">✎</button>
+                            <button onClick={() => handleClearChildHistory(classrooms[0].id, ch.id)} className="px-2 py-1 bg-red-400 text-white rounded">🗑</button>
+                          </>
+                        )}
+                      </div>
+                    </li>
+                  ))
+                ) : (
+                  <li className="text-sm text-gray-500">Aucun enfant – ajoutez-en un</li>
+                )}
+              </ul>
+            </div>
+
+            <div className="mt-4">
+              <button
+                onClick={() => {
+                  const name = prompt("Nom de l'enfant") || 'Enfant';
+                  // create classroom if none exists
+                  if (!classrooms.length) {
+                    const c = storage.addClassroom('Classe 1');
+                    setClassrooms([c]);
+                    setSelectedClassroomId(c.id);
+                  }
+                  handleAddChild(name);
+                }}
+                className="px-3 py-2 bg-indigo-600 text-white rounded-md"
+              >Ajouter un enfant</button>
+            </div>
+          </div>
+        </div>
         {allDone && (
           <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
             <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-8 shadow-2xl text-center pointer-events-auto">
