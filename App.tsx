@@ -26,6 +26,7 @@ const App: React.FC = () => {
   const [builtCombos, setBuiltCombos] = useState<Record<string, boolean>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<'success' | 'warning' | null>(null);
+  const [showDuplicateGif, setShowDuplicateGif] = useState(false);
   const [allDone, setAllDone] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [childName, setChildName] = useState('');
@@ -75,6 +76,7 @@ const App: React.FC = () => {
     setHouseState({ body: null, roof: null });
     setShowConfetti(false);
     setMessage(null);
+    setShowDuplicateGif(false);
   };
 
   // Load classrooms from storage on mount
@@ -323,6 +325,7 @@ const App: React.FC = () => {
   const resetCurrentHouse = () => {
     setHouseState({ body: null, roof: null });
     setShowConfetti(false);
+    setShowDuplicateGif(false);
   };
   
   const resetAll = () => {
@@ -333,6 +336,7 @@ const App: React.FC = () => {
     setBuiltCombos({});
     setAllDone(false);
     setMessage(null);
+    setShowDuplicateGif(false);
   };
 
   const finalizePlacement = (target: 'house-body' | 'house-roof') => {
@@ -357,14 +361,12 @@ const App: React.FC = () => {
     const existsInHistory = houseHistory.some(h => h.body.color === houseState.body!.color && h.roof.color === houseState.roof!.color);
 
   if (existsInHistory) {
-      // duplicate - warning and reset current house after a short delay
-      setMessage('Cette combinaison de couleurs a déjà été construite. Essaie une autre!');
-      setMessageType('warning');
+      // duplicate - show GIF and reset current house after a short delay
+      setShowDuplicateGif(true);
       setShowConfetti(false);
       setTimeout(() => {
         setHouseState({ body: null, roof: null });
-        setMessage(null);
-        setMessageType(null);
+        setShowDuplicateGif(false);
       }, 3000);
       return;
     }
@@ -549,11 +551,19 @@ const App: React.FC = () => {
               />
 
               {/* Message overlay centered over the playground */}
-              {message && (
+              {(showDuplicateGif || message) && (
                 <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-40">
-                  <div className={`pointer-events-auto rounded-lg shadow-lg px-6 py-4 max-w-md text-center ${messageType === 'success' ? 'bg-green-100 border-l-4 border-green-400 text-green-800' : 'bg-yellow-100 border-l-4 border-yellow-400 text-yellow-800'}`}>
-                    {message}
-                  </div>
+                  {showDuplicateGif ? (
+                    <img
+                      src="/images/emoji-no.gif"
+                      alt="Combinaison déjà construite"
+                      className="ml-80 w-28 h-28 md:w-36 md:h-36 select-none"
+                    />
+                  ) : (
+                    <div className={`pointer-events-auto rounded-lg shadow-lg px-6 py-4 max-w-md text-center ${messageType === 'success' ? 'bg-green-100 border-l-4 border-green-400 text-green-800' : 'bg-yellow-100 border-l-4 border-yellow-400 text-yellow-800'}`}>
+                      {message}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -659,12 +669,19 @@ const App: React.FC = () => {
         {allDone && (
           <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
             <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-8 shadow-2xl text-center pointer-events-auto">
-              <h2 className="text-3xl font-extrabold text-green-700 mb-3">Félicitations 🎉</h2>
+              {/* <span className="sr-only">Félicitations 🎉</span> */}
+              <div className="flex justify-center mb-3">
+                <img
+                  src="/images/emoji-sucess.gif"
+                  alt="Félicitations"
+                  className="w-28 h-28 select-none"
+                />
+              </div>
               <p className="text-lg text-gray-700">Tu as construit toutes les maisons possibles !</p>
               <div className="mt-6">
                 <button
-                  onClick={() => { setAllDone(false); setMessage(null); setShowConfetti(false); }}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700"
+                  onClick={() => { setAllDone(false); setMessage(null); setShowConfetti(false); setShowDuplicateGif(false); }}
+                  className="px-6 py-3 bg-sky-600 text-white rounded-lg shadow hover:bg-blue-700"
                 >
                   Continuer
                 </button>

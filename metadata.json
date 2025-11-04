@@ -1,0 +1,5 @@
+{
+  "name": "Jeu de Formes Éducatif",
+  "description": "Un jeu éducatif de glisser-déposer où les enfants peuvent placer des formes colorées sur une aire de jeu. Ils peuvent déplacer les formes depuis une palette, les réorganiser sur l'aire de jeu et tout réinitialiser.",
+  "requestFramePermissions": []
+}
