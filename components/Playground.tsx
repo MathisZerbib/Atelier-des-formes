@@ -53,7 +53,7 @@ export const Playground: React.FC<PlaygroundProps> = ({ shapes, houseBody, house
   return (
     <div
       ref={setNodeRef}
-      className="flex-1 bg-blue-100 rounded-2xl relative overflow-hidden shadow-inner p-8 flex items-center justify-center"
+      className="flex-1 bg-blue-100 rounded-2xl relative overflow-hidden shadow-inner p-8 flex items-center justify-start"
     >
       {/* House structure */}
       <div className="relative w-48 h-72 flex flex-col items-center">
