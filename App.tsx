@@ -8,6 +8,7 @@ import { Shape } from './components/Shape';
 import { History } from './components/History';
 import Confetti from './components/Confetti';
 import ConfirmationModal from './components/ConfirmationModal';
+import PWAUpdatePrompt from './components/PWAUpdatePrompt';
 import * as storage from './storage';
 
 type House = { body: PlacedShape; roof: PlacedShape };
@@ -394,7 +395,7 @@ const App: React.FC = () => {
     const newUniqueCount = houseHistory.length + 1;
     if (newUniqueCount >= 9) {
       setAllDone(true);
-      setMessage('Félicitations ! Tu as construit les 9 maisons différentes 🎉');
+      // setMessage('Félicitations ! Tu as construit les 9 maisons différentes 🎉');
       setMessageType('success');
       // Do not auto-advance when the game is complete
       return;
@@ -424,6 +425,7 @@ const App: React.FC = () => {
 
   return (
     <>
+    <PWAUpdatePrompt />
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       {showConfetti && <Confetti />}
       <div className="flex flex-col h-screen p-4 md:p-8 font-sans bg-sky-50">
@@ -551,13 +553,15 @@ const App: React.FC = () => {
               />
 
               {/* Message overlay centered over the playground */}
-              {(showDuplicateGif || message) && (
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-40">
+                {(showDuplicateGif || message) && (
+                  
+                  /// display it at the far left of the playground
+                <div className="absolute left-60 top-1/2 transform -translate-y-1/2 flex items-center justify-center pointer-events-none">
                   {showDuplicateGif ? (
                     <img
                       src="/images/emoji-no.gif"
                       alt="Combinaison déjà construite"
-                      className="ml-80 w-28 h-28 md:w-36 md:h-36 select-none"
+                      className="ml-4 w-28 h-28 md:w-36 md:h-36 select-none"
                     />
                   ) : (
                     <div className={`pointer-events-auto rounded-lg shadow-lg px-6 py-4 max-w-md text-center ${messageType === 'success' ? 'bg-green-100 border-l-4 border-green-400 text-green-800' : 'bg-yellow-100 border-l-4 border-yellow-400 text-yellow-800'}`}>
@@ -681,7 +685,7 @@ const App: React.FC = () => {
                   className="w-28 h-28 select-none"
                 />
               </div>
-              <p className="text-lg text-gray-700">Tu as construit toutes les maisons possibles !</p>
+              <p className="text-lg text-gray-700">Tu as construit les 9 maisons possibles !</p>
               <div className="mt-6">
                 <button
                   onClick={() => { setAllDone(false); setMessage(null); setShowConfetti(false); setShowDuplicateGif(false); }}
