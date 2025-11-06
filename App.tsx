@@ -572,12 +572,14 @@ const App: React.FC = () => {
         </main>
         {/* Right-side classroom panel drawer */}
         <div aria-hidden={!panelOpen} className={`fixed right-0 top-0 h-full w-80 bg-white shadow-lg transform transition-transform ${panelOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-          <div className="p-4 flex items-center justify-between border-b">
-            <h3 className="text-lg font-bold">Classe</h3>
-            <button onClick={() => setPanelOpen(false)} className="px-2 py-1 text-sm text-gray-600">Fermer</button>
-          </div>
-          <div className="p-4 overflow-auto">
-            <div className="mb-4">
+          <div className="flex flex-col h-full">
+            <div className="p-4 flex items-center justify-between border-b">
+              <h3 className="text-lg font-bold">Classe</h3>
+              <button onClick={() => setPanelOpen(false)} className="px-2 py-1 text-sm text-gray-600">Fermer</button>
+            </div>
+            {/* Scrollable list area */}
+            <div className="flex-1 p-4 overflow-y-auto">
+              <div className="mb-4">
               <h4 className="text-sm font-semibold mb-2">Enfants</h4>
               <ul className="space-y-2">
                 {classrooms[0]?.children?.length ? (
@@ -646,10 +648,12 @@ const App: React.FC = () => {
                 ) : (
                   <li className="text-sm text-gray-500">Aucun enfant – ajoutez-en un</li>
                 )}
-              </ul>
+                </ul>
+              </div>
             </div>
 
-            <div className="mt-4">
+            {/* Sticky footer with persistent add button */}
+            <div className="p-4 border-t bg-white">
               <button
                 onClick={() => {
                   const name = prompt("Nom de l'enfant") || 'Enfant';
@@ -661,7 +665,7 @@ const App: React.FC = () => {
                   }
                   handleAddChild(name);
                 }}
-                className="px-3 py-2 bg-indigo-600 text-white rounded-md"
+                className="w-full px-3 py-2 bg-indigo-600 text-white rounded-md"
               >Ajouter un enfant</button>
             </div>
           </div>
