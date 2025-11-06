@@ -8,6 +8,7 @@ import { Shape } from './components/Shape';
 import { History } from './components/History';
 import Confetti from './components/Confetti';
 import ConfirmationModal from './components/ConfirmationModal';
+import AddChildModal from './components/AddChildModal';
 import PWAUpdatePrompt from './components/PWAUpdatePrompt';
 import * as storage from './storage';
 
@@ -52,6 +53,7 @@ const App: React.FC = () => {
     childName?: string;
     count?: number;
   }>({ open: false, action: null });
+  const [addChildModalOpen, setAddChildModalOpen] = useState(false);
   
   const playgroundRef = useRef<HTMLDivElement>(null);
   const successTimeoutRef = useRef<number | null>(null);
@@ -659,16 +661,7 @@ const App: React.FC = () => {
             {/* Sticky footer with persistent add button */}
             <div className="p-4 border-t bg-white">
               <button
-                onClick={() => {
-                  const name = prompt("Nom de l'enfant") || 'Enfant';
-                  // create classroom if none exists
-                  if (!classrooms.length) {
-                    const c = storage.addClassroom('Classe 1');
-                    setClassrooms([c]);
-                    setSelectedClassroomId(c.id);
-                  }
-                  handleAddChild(name);
-                }}
+                onClick={() => setAddChildModalOpen(true)}
                 className="w-full px-3 py-2 bg-indigo-600 text-white rounded-md"
               >Ajouter un enfant</button>
             </div>
@@ -725,6 +718,21 @@ const App: React.FC = () => {
         }}
         onCancel={() => setConfirmModal({ open: false, action: null })}
       />
+    <AddChildModal
+      open={addChildModalOpen}
+      onCancel={() => setAddChildModalOpen(false)}
+      onConfirm={(name) => {
+        if (!name) { setAddChildModalOpen(false); return; }
+        if (!classrooms.length) {
+          const c = storage.addClassroom('Classe 1');
+          setClassrooms([c]);
+          setSelectedClassroomId(c.id);
+        }
+        handleAddChild(name);
+        // Keep drawer open as requested
+        setAddChildModalOpen(false);
+      }}
+    />
     </>
   );
 };

@@ -9,13 +9,20 @@ interface HistoryProps {
 }
 
 export const History: React.FC<HistoryProps> = ({ history, childName }) => {
-  if (history.length === 0) {
-    return null;
-  }
-  
-  const title = childName 
-    ? `Maisons Construites par ${childName}` 
+  const title = childName
+    ? `Maisons Construites par ${childName}`
     : "Maisons Construites";
+
+  if (history.length === 0) {
+    return (
+      <div id="history-panel" className="bg-white rounded-xl shadow-lg p-4">
+        <h2 className="text-xl font-bold text-gray-700 mb-3 text-center">{title}</h2>
+        <div className="p-10 flex items-center justify-center">
+          <p className="text-gray-500 text-center my-14">Commence à construire les maisons !</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div id="history-panel" className="bg-white rounded-xl shadow-lg p-4">
