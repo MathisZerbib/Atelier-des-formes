@@ -82,25 +82,28 @@ const App: React.FC = () => {
     setShowDuplicateGif(false);
   };
 
-  // Load classrooms from storage on mount
+  // Load classrooms from storage on mount (ensure IndexedDB init first)
   useEffect(() => {
-    let classes = storage.loadClassrooms();
-    // ensure there's at least one classroom (single-classroom app)
-    if (classes.length === 0) {
-      const created = storage.addClassroom('Classe 1');
-      classes = [created];
-    }
-    setClassrooms(classes);
-    // always use first classroom
-    setSelectedClassroomId(classes[0].id);
-    if (classes[0].children.length > 0) {
-      setSelectedChildId(classes[0].children[0].id);
-      setChildName(classes[0].children[0].name);
-      setHouseHistory(classes[0].children[0].history || []);
-      const combos: Record<string, boolean> = {};
-      (classes[0].children[0].history || []).forEach(h => { combos[`${h.body.color}|${h.roof.color}`] = true; });
-      setBuiltCombos(combos);
-    }
+    (async () => {
+      await storage.init();
+      let classes = storage.loadClassrooms();
+      // ensure there's at least one classroom (single-classroom app)
+      if (classes.length === 0) {
+        const created = storage.addClassroom('Classe 1');
+        classes = [created];
+      }
+      setClassrooms(classes);
+      // always use first classroom
+      setSelectedClassroomId(classes[0].id);
+      if (classes[0].children.length > 0) {
+        setSelectedChildId(classes[0].children[0].id);
+        setChildName(classes[0].children[0].name);
+        setHouseHistory(classes[0].children[0].history || []);
+        const combos: Record<string, boolean> = {};
+        (classes[0].children[0].history || []).forEach(h => { combos[`${h.body.color}|${h.roof.color}`] = true; });
+        setBuiltCombos(combos);
+      }
+    })();
   }, []);
 
   // close dropdown on outside click
