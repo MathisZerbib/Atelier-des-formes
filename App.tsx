@@ -10,6 +10,7 @@ import Confetti from './components/Confetti';
 import ConfirmationModal from './components/ConfirmationModal';
 import AddChildModal from './components/AddChildModal';
 import PWAUpdatePrompt from './components/PWAUpdatePrompt';
+import MigrateStorage from './components/MigrateStorage';
 import { SUCCESS_MESSAGES } from './constants';
 import * as storage from './storage';
 
@@ -56,6 +57,12 @@ const App: React.FC = () => {
   }>({ open: false, action: null });
   const [addChildModalOpen, setAddChildModalOpen] = useState(false);
   const [confettiOrigin, setConfettiOrigin] = useState<{ x: number; y: number } | undefined>(undefined);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [uiMounted, setUiMounted] = useState(false);
+  const settingsFileRef = useRef<HTMLInputElement | null>(null);
+  const settingsIdbFileRef = useRef<HTMLInputElement | null>(null);
   
   const playgroundRef = useRef<HTMLDivElement>(null);
   const successTimeoutRef = useRef<number | null>(null);
@@ -88,11 +95,22 @@ const App: React.FC = () => {
   useEffect(() => {
     (async () => {
       await storage.init();
+      const migrationNeeded = await storage.needsIdbToLocalMigration();
       let classes = storage.loadClassrooms();
-      // ensure there's at least one classroom (single-classroom app)
-      if (classes.length === 0) {
+      // Avoid creating a default class if a migration from IDB is pending,
+      // to prevent conflicts and preserve the ability to overwrite LS.
+      if (!migrationNeeded && classes.length === 0) {
         const created = storage.addClassroom('Classe 1');
         classes = [created];
+      }
+      if (classes.length === 0) {
+        setClassrooms([]);
+        setSelectedClassroomId(null);
+        setSelectedChildId(null);
+        setChildName('');
+        setHouseHistory([]);
+        setBuiltCombos({});
+        return;
       }
       setClassrooms(classes);
       // always use first classroom
@@ -106,6 +124,11 @@ const App: React.FC = () => {
         setBuiltCombos(combos);
       }
     })();
+  }, []);
+
+  // Mark UI as mounted to avoid initial slide-out animation flicker on drawers
+  useEffect(() => {
+    setUiMounted(true);
   }, []);
 
   // close dropdown on outside click
@@ -456,6 +479,7 @@ const App: React.FC = () => {
 
   return (
     <>
+    <MigrateStorage />
     <PWAUpdatePrompt />
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
   {showConfetti && <Confetti origin={confettiOrigin} />}
@@ -503,11 +527,23 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex gap-4 items-center">
+          <div className="flex gap-2 items-center">
+            {/* Settings gear opens migration/export/import drawer */}
+            <button
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Paramètres"
+              title="Paramètres"
+              className="inline-flex items-center justify-center w-10 h-10 rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-400"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5">
+                <path d="M12 9a3 3 0 100 6 3 3 0 000-6z" />
+                <path fillRule="evenodd" d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.12a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.12a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06A2 2 0 016.07 3.4l.06.06c.47.47 1.13.65 1.76.49A1.65 1.65 0 009.4 2.4V2a2 2 0 014 0v.12c0 .67.39 1.27 1 1.51.63.16 1.29-.02 1.76-.49l.06-.06a2 2 0 012.83 2.83l-.06.06c-.47.47-.65 1.13-.49 1.76.24.61.84 1 1.51 1H21a2 2 0 010 4h-.12c-.67 0-1.27.39-1.51 1z" clipRule="evenodd" />
+              </svg>
+            </button>
             <button
               onClick={() => setPanelOpen(true)}
               className="px-3 py-2 bg-sky-600 text-white rounded-md"
-              aria-label="Ouvrir la classe"
+              aria-label="Ouvrir ma classe"
             >Ma classe</button>
 
             <button
@@ -635,7 +671,7 @@ const App: React.FC = () => {
            <History history={houseHistory} childName={childName} />
         </main>
         {/* Right-side classroom panel drawer */}
-        <div aria-hidden={!panelOpen} className={`fixed right-0 top-0 h-full w-80 bg-white shadow-lg transform transition-transform ${panelOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+  <div aria-hidden={!panelOpen} className={`fixed right-0 top-0 h-full w-80 bg-white shadow-lg transform ${uiMounted ? 'transition-transform' : ''} ${panelOpen ? 'translate-x-0' : 'translate-x-full'}`}>
           <div className="flex flex-col h-full">
             <div className="p-4 flex items-center justify-between border-b">
               <h3 className="text-lg font-bold">Classe</h3>
@@ -733,6 +769,130 @@ const App: React.FC = () => {
         ) : null}
       </DragOverlay>
     </DndContext>
+    {/* Settings / Migration Drawer */}
+  <div aria-hidden={!settingsOpen} className={`fixed right-0 top-0 h-full w-96 max-w-[90vw] bg-white shadow-lg transform ${uiMounted ? 'transition-transform' : ''} ${settingsOpen ? 'translate-x-0' : 'translate-x-full'} z-50`}>
+      <div className="flex flex-col h-full">
+        <div className="p-4 flex items-center justify-between border-b">
+          <h3 className="text-lg font-bold">Paramètres</h3>
+          <button onClick={() => setSettingsOpen(false)} className="px-2 py-1 text-sm text-gray-600">Fermer</button>
+        </div>
+        <div className="flex-1 p-4 overflow-y-auto space-y-6">
+          {/* Export current classes */}
+          <section>
+            <h4 className="text-sm font-semibold mb-2">Exporter ma classe</h4>
+            <p className="text-xs text-gray-600 mb-2">Télécharge un fichier JSON contenant toutes les classes et historiques.</p>
+            <button
+              className="px-3 py-2 bg-white border rounded-md text-gray-700"
+              onClick={async () => {
+                try {
+                  const { buildCurrentExportPayload } = await import('./storage');
+                  const payload = buildCurrentExportPayload();
+                  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                  a.href = url;
+                  a.download = `atelier-classrooms-export-${ts}.json`;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                  URL.revokeObjectURL(url);
+                } catch (e) {
+                  console.error(e);
+                  alert("Export impossible.");
+                }
+              }}
+            >
+              Exporter ma classe
+            </button>
+          </section>
+
+          {/* Import classes from file */}
+          <section>
+            <h4 className="text-sm font-semibold mb-2">Importer une classe depuis un fichier</h4>
+            <p className="text-xs text-gray-600 mb-2">Sélectionnez un fichier JSON précédemment exporté.</p>
+            <input
+              type="file"
+              accept="application/json,.json"
+              ref={settingsFileRef}
+              className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                try {
+                  const text = await f.text();
+                  const json = JSON.parse(text);
+                  const confirm = window.confirm("Importer ces données dans le stockage local ?\nCela remplacera les données actuelles si elles diffèrent.");
+                  if (!confirm) return;
+                  const res = await storage.importLocalStorageFromJsonObject(json);
+                  setImportStatus(res.message);
+                  if (res.status === 'ok') {
+                    const classes = storage.loadClassrooms();
+                    setClassrooms(classes);
+                  } else if (res.status === 'conflict') {
+                    const force = window.confirm(res.message + "\n\nForcer l'écrasement ?");
+                    if (force) {
+                      const forced = await storage.importLocalStorageFromJsonObject(json, { forceOverwrite: true });
+                      setImportStatus(forced.message);
+                      if (forced.status === 'ok') setClassrooms(storage.loadClassrooms());
+                    }
+                  }
+                } catch (err) {
+                  console.error(err);
+                  setImportStatus('Fichier invalide ou lecture impossible.');
+                } finally {
+                  if (settingsFileRef.current) settingsFileRef.current.value = '';
+                }
+              }}
+            />
+            <button
+              className="px-3 py-2 bg-white border rounded-md text-gray-700"
+              onClick={() => settingsFileRef.current?.click()}
+            >
+              Importer ma classe
+            </button>
+            {importStatus && (
+              <p className="mt-2 text-xs text-gray-600">{importStatus}</p>
+            )}
+          </section>
+
+          {/* TEST ONLY: Import into IndexedDB to simulate pre-migration */}
+          <section className="border-t pt-4">
+            <h4 className="text-sm font-semibold mb-2">[Test] Importer dans IndexedDB</h4>
+            <p className="text-xs text-gray-600 mb-2">Charge un JSON d'export dans IndexedDB pour simuler un état avant migration. Idéal pour tester la bannière de migration.</p>
+            <input
+              type="file"
+              accept="application/json,.json"
+              ref={settingsIdbFileRef}
+              className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                try {
+                  const text = await f.text();
+                  const json = JSON.parse(text);
+                  const confirm = window.confirm("Importer ce fichier dans IndexedDB (TEST) ?\nCela n'affecte pas immédiatement le stockage local.");
+                  if (!confirm) return;
+                  const res = await storage.testImportToIndexedDBFromJsonObject(json, { clearMigrationStatus: true });
+                  setImportStatus(res.message + "\nAstuce: rechargez la page pour voir la proposition de migration.");
+                } catch (err) {
+                  console.error(err);
+                  setImportStatus('Fichier invalide ou lecture impossible.');
+                } finally {
+                  if (settingsIdbFileRef.current) settingsIdbFileRef.current.value = '';
+                }
+              }}
+            />
+            <button
+              className="px-3 py-2 bg-white border rounded-md text-gray-700"
+              onClick={() => settingsIdbFileRef.current?.click()}
+            >
+              Importer dans IndexedDB (test)
+            </button>
+          </section>
+        </div>
+      </div>
+    </div>
     <ConfirmationModal
         open={confirmModal.open}
         title={confirmModal.action === 'delete-child' ? `Supprimer "${confirmModal.childName || ''}" ?` : `Effacer l'historique de "${confirmModal.childName || ''}" ?`}
