@@ -59,14 +59,16 @@
 import React, { useEffect } from "react";
 import confetti from "canvas-confetti";
 
-const ConfettiBurst: React.FC = () => {
+type Origin = { x: number; y: number };
+
+const ConfettiBurst: React.FC<{ origin?: Origin }> = ({ origin }) => {
   useEffect(() => {
     // You can tweak these options for different looks
     confetti({
       particleCount: 100,      // how many confetti pieces
       spread: 100,              // how wide the burst spreads
       startVelocity: 45,       // how fast particles shoot out
-      origin: { y: 0.45, x: 0.55 },      // vertical position (0 = top, 1 = bottom)
+      origin: origin || { y: 0.45, x: 0.55 },      // vertical position (0 = top, 1 = bottom)
       decay: 0.9,
       // colors: ["#bb0000", "#ffffff", "#00bb00", "#0000bb"], // optional
       zIndex: 9999

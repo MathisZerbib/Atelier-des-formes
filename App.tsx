@@ -10,6 +10,7 @@ import Confetti from './components/Confetti';
 import ConfirmationModal from './components/ConfirmationModal';
 import AddChildModal from './components/AddChildModal';
 import PWAUpdatePrompt from './components/PWAUpdatePrompt';
+import { SUCCESS_MESSAGES } from './constants';
 import * as storage from './storage';
 
 type House = { body: PlacedShape; roof: PlacedShape };
@@ -54,6 +55,7 @@ const App: React.FC = () => {
     count?: number;
   }>({ open: false, action: null });
   const [addChildModalOpen, setAddChildModalOpen] = useState(false);
+  const [confettiOrigin, setConfettiOrigin] = useState<{ x: number; y: number } | undefined>(undefined);
   
   const playgroundRef = useRef<HTMLDivElement>(null);
   const successTimeoutRef = useRef<number | null>(null);
@@ -261,7 +263,7 @@ const App: React.FC = () => {
   };
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
-    if (showConfetti) return; // Disable dragging when celebrating
+    if (showConfetti || showDuplicateGif || allDone) return; // Disable dragging when celebrating, duplicate modal, or final modal is open
     
     setActiveShape(null);
     const { active, over, delta } = event;
@@ -326,7 +328,7 @@ const App: React.FC = () => {
         );
       }
     }
-  }, [houseState, showConfetti]);
+  }, [houseState, showConfetti, showDuplicateGif, allDone]);
 
   const resetCurrentHouse = () => {
     setHouseState({ body: null, roof: null });
@@ -334,16 +336,16 @@ const App: React.FC = () => {
     setShowDuplicateGif(false);
   };
   
-  const resetAll = () => {
-    setPlacedShapes([]);
-    setHouseState({ body: null, roof: null });
-    setHouseHistory([]);
-    setShowConfetti(false);
-    setBuiltCombos({});
-    setAllDone(false);
-    setMessage(null);
-    setShowDuplicateGif(false);
-  };
+  // const resetAll = () => {
+  //   setPlacedShapes([]);
+  //   setHouseState({ body: null, roof: null });
+  //   setHouseHistory([]);
+  //   setShowConfetti(false);
+  //   setBuiltCombos({});
+  //   setAllDone(false);
+  //   setMessage(null);
+  //   setShowDuplicateGif(false);
+  // };
 
   const finalizePlacement = (target: 'house-body' | 'house-roof') => {
     if (!pendingPlacement) return;
@@ -367,13 +369,9 @@ const App: React.FC = () => {
     const existsInHistory = houseHistory.some(h => h.body.color === houseState.body!.color && h.roof.color === houseState.roof!.color);
 
   if (existsInHistory) {
-      // duplicate - show GIF and reset current house after a short delay
+      // duplicate - open a left-side modal and wait for user to continue
       setShowDuplicateGif(true);
       setShowConfetti(false);
-      setTimeout(() => {
-        setHouseState({ body: null, roof: null });
-        setShowDuplicateGif(false);
-      }, 3000);
       return;
     }
 
@@ -383,25 +381,52 @@ const App: React.FC = () => {
       return newHistory;
     });
     setBuiltCombos(prev => ({ ...prev, [comboKey]: true }));
+    // Set confetti origin to house location (center of #house-anchor relative to viewport)
+    try {
+      const anchor = document.getElementById('house-anchor');
+      if (anchor) {
+        const r = anchor.getBoundingClientRect();
+        const x = (r.left + r.width / 2) / window.innerWidth;
+        const y = (r.top + r.height / 2) / window.innerHeight;
+        setConfettiOrigin({ x, y });
+      } else {
+        setConfettiOrigin(undefined);
+      }
+    } catch {
+      setConfettiOrigin(undefined);
+    }
     setShowConfetti(true);
-    setMessage('Maison construite !');
+    // pick a random success message (avoid repeating the immediately previous one)
+    setMessage(prev => {
+      const pool = SUCCESS_MESSAGES;
+      if (!prev) return pool[Math.floor(Math.random() * pool.length)];
+      let next = pool[Math.floor(Math.random() * pool.length)];
+      if (pool.length > 1) {
+        let safety = 0;
+        while (next === prev && safety < 5) {
+          next = pool[Math.floor(Math.random() * pool.length)];
+          safety++;
+        }
+      }
+      return next;
+    });
     setMessageType('success');
 
-    // clear the success message after 1500ms (store the timer so we can clean it up)
+    // clear the success message after a bit longer (e.g., 2200ms)
     if (successTimeoutRef.current) {
       window.clearTimeout(successTimeoutRef.current);
     }
     successTimeoutRef.current = window.setTimeout(() => {
       setMessage(null);
       setMessageType(null);
-    }, 1500);
+    }, 2200);
 
-    // If this addition makes 9 unique houses, set allDone and show final message
+    // If this addition makes 9 unique houses, show only the final success modal (no small card)
     const newUniqueCount = houseHistory.length + 1;
     if (newUniqueCount >= 9) {
       setAllDone(true);
-      // setMessage('Félicitations ! Tu as construit les 9 maisons différentes 🎉');
-      setMessageType('success');
+      setMessage(null);
+      setMessageType(null);
       // Do not auto-advance when the game is complete
       return;
     }
@@ -410,10 +435,11 @@ const App: React.FC = () => {
     if (advanceTimeoutRef.current) {
       window.clearTimeout(advanceTimeoutRef.current);
     }
+    // give a small gap (e.g., 300ms) after the message disappears
     advanceTimeoutRef.current = window.setTimeout(() => {
       setHouseState({ body: null, roof: null });
       setShowConfetti(false);
-    }, 1700);
+    }, 2500);
     // cleanup timers when effect re-runs or component unmounts
     return () => {
       if (successTimeoutRef.current) {
@@ -432,7 +458,7 @@ const App: React.FC = () => {
     <>
     <PWAUpdatePrompt />
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      {showConfetti && <Confetti />}
+  {showConfetti && <Confetti origin={confettiOrigin} />}
       <div className="flex flex-col h-screen p-4 md:p-8 font-sans bg-sky-50">
         <header className="flex flex-wrap justify-between items-center gap-4 mb-6">
           <div className="flex items-baseline gap-4">
@@ -548,32 +574,61 @@ const App: React.FC = () => {
           <div className="flex-1 flex gap-8 min-h-0">
             <Palette />
             <div ref={playgroundRef} className="flex-1 flex relative">
-              {/* Playground area */}
-              <Playground
-                shapes={placedShapes}
-                houseBody={houseState.body}
-                houseRoof={houseState.roof}
-                pendingPlacement={pendingPlacement}
-                onPlacementFinalized={finalizePlacement}
-              />
+              {allDone ? (
+                <div className="flex-1 flex items-center justify-center w-full">
+                  <h2 className="text-3xl md:text-5xl font-extrabold text-sky-700 text-center px-4">
+                    {`Bravo ${childName} tu as réussi l'exercice !`}
+                  </h2>
+                </div>
+              ) : (
+                <>
+                  {/* Playground area */}
+                  <Playground
+                    shapes={placedShapes}
+                    houseBody={houseState.body}
+                    houseRoof={houseState.roof}
+                    pendingPlacement={pendingPlacement}
+                    onPlacementFinalized={finalizePlacement}
+                  />
 
-              {/* Message overlay centered over the playground */}
-                {(showDuplicateGif || message) && (
-                  
-                  /// display it at the far left of the playground
-                <div className="absolute left-60 top-1/2 transform -translate-y-1/2 flex items-center justify-center pointer-events-none">
-                  {showDuplicateGif ? (
-                    <img
-                      src="/images/emoji-no.gif"
-                      alt="Combinaison déjà construite"
-                      className="ml-4 w-28 h-28 md:w-36 md:h-36 select-none"
-                    />
-                  ) : (
-                    <div className={`pointer-events-auto rounded-lg shadow-lg px-6 py-4 max-w-md text-center ${messageType === 'success' ? 'bg-green-100 border-l-4 border-green-400 text-green-800' : 'bg-yellow-100 border-l-4 border-yellow-400 text-yellow-800'}`}>
-                      {message}
+                  {/* Duplicate modal on the left side (house remains visible) */}
+                  {showDuplicateGif && (
+                    <div className="absolute left-6 top-1/2 -translate-y-1/2 z-10 pl-52">
+                      <div className="pointer-events-auto w-64 md:w-72 bg-white border border-red-200 rounded-xl shadow-xl p-4 flex flex-col items-center text-center">
+                        <img
+                          src="/images/emoji-no.gif"
+                          alt="Combinaison déjà construite"
+                          className="w-24 h-24 md:w-28 md:h-28 select-none"
+                        />
+                        <p className="mt-3 text-sm text-black font-medium">
+                            Cette maison a déjà été construite !
+                            Tente une autre combinaison.
+                        </p>
+                        <button
+                          onClick={() => { setShowDuplicateGif(false); setHouseState({ body: null, roof: null }); }}
+                          className="mt-4 inline-flex items-center px-4 py-2 bg-sky-600 text-white rounded-lg shadow hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400"
+                        >
+                          Continuer
+                        </button>
+                      </div>
                     </div>
                   )}
-                </div>
+
+                  {/* Success/warning message aligned same as duplicate modal (left side) */}
+                  {message && !showDuplicateGif && (
+                    <div className="absolute left-6 top-1/2 -translate-y-1/2 z-10 pl-52">
+                      <div
+                        className={`pointer-events-auto w-64 md:w-72 rounded-xl shadow-xl p-4 text-center border ${
+                          messageType === 'success'
+                            ? 'bg-white border-green-200 text-green-700'
+                            : 'bg-white border-yellow-200 text-yellow-700'
+                        }`}
+                      >
+                        {message}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -670,29 +725,7 @@ const App: React.FC = () => {
             </div>
           </div>
         </div>
-        {allDone && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-            <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-8 shadow-2xl text-center pointer-events-auto">
-              {/* <span className="sr-only">Félicitations 🎉</span> */}
-              <div className="flex justify-center mb-3">
-                <img
-                  src="/images/emoji-sucess.gif"
-                  alt="Félicitations"
-                  className="w-28 h-28 select-none"
-                />
-              </div>
-              <p className="text-lg text-gray-700">Tu as construit les 9 maisons possibles !</p>
-              <div className="mt-6">
-                <button
-                  onClick={() => { setAllDone(false); setMessage(null); setShowConfetti(false); setShowDuplicateGif(false); }}
-                  className="px-6 py-3 bg-sky-600 text-white rounded-lg shadow hover:bg-blue-700"
-                >
-                  Continuer
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Final overlay removed; final success now shown in left-side panel inside the playground */}
       </div>
       <DragOverlay>
         {activeShape ? (
